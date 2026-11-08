@@ -2,3 +2,6 @@
 ./pycode/models/*
 .venv/
 venv/
+
+
+!pycode/models/.gitkeep

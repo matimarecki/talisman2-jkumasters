@@ -107,7 +107,7 @@ if __name__ == "__main__":
     random.seed(0); torch.manual_seed(0)
     # model = train(load_dir("../examples"),epochs=5)
     graphlist = load_dir("../examples")
-    model = Selector(in_dim=7, h=32, layers=4)
+    model = Selector(in_dim=7, h=32, layers=3)
     train(graphs=graphlist, epochs=50, model=model)
 
     # predict(model, load_file("../examples/abc4.aig"), 2)
