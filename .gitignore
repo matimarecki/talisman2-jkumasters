@@ -1,2 +1,4 @@
 .idea/
-
+./pycode/models/*
+.venv/
+venv/
