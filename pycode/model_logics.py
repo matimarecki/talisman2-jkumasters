@@ -108,16 +108,16 @@ if __name__ == "__main__":
     # model = train(load_dir("../examples"),epochs=5)
     graphlist = load_dir("../examples")
     model = Selector(in_dim=7, h=32, layers=3)
-    train(graphs=graphlist, epochs=50, model=model)
+    train(graphs=graphlist, epochs=5, model=model)
 
     # predict(model, load_file("../examples/abc4.aig"), 2)
-    torch.save(model.state_dict(), "models/aig_gnn_basics_50epochs.pt")
-    predict(model, load_file("../examples/abc4.aig"), 2)
+    torch.save(model.state_dict(), "models/aig_gnn_basics_5epochs.pt")
+    predict(model, load_file("../examples/abc4.aig"), 15)
 
-    train(graphs=graphlist, epochs=50, model=model)
+    train(graphs=graphlist, epochs=10, model=model)
 
 
-    torch.save(model.state_dict(), "models/aig_gnn_basics_100epochs.pt")
+    torch.save(model.state_dict(), "models/aig_gnn_basics_15epochs.pt")
     predict(model, load_file("../examples/abc4.aig"), 2)
     # if len(sys.argv) == 4:
     #     predict(model, load_file(sys.argv[2]), int(sys.argv[3]))
