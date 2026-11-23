@@ -12,6 +12,7 @@
 #include <nmod_mat.h>
 #include <unordered_set>
 #include <vector>
+#include <string>
 
 #include "gate.hpp"
 #include "linear_algebra.hpp"
@@ -64,7 +65,15 @@ get_gate(Subcircuit& sc, size_t i) {
 
 void
 print_subcircuit(Subcircuit& sc);
+// Enable dumping: files go to <out_dir>/<circuit_stem>/root_<var>.json.
+// If this is never called, nothing is written.
+void
+set_subcircuit_dump(const std::string& circuit_file,
+                    const std::string& out_dir = "subcircuits");
 
+void
+save_subcircuit_to_file(Subcircuit& sc, Gate* root, unsigned size,
+                        const char* mode);
 }// namespace talisman
 
 #endif// TALISMAN_SRC_SUBCIRCUIT_H_

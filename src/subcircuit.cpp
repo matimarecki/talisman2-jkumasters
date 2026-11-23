@@ -16,6 +16,10 @@
 #include <bitset>
 #include <functional>
 #include <random>
+#include <filesystem>
+#include <fstream>
+#include <mutex>
+#include <string>
 
 #include <cmsgen/cmsgen.h>
 
@@ -486,6 +490,143 @@ extract_subcircuit_by_depth(Gate* root, unsigned depth) {
   if(verbose >= 1)
     print_subcircuit(result);
   return result;
+}
+/*------------------------------------------------------------------------*/
+static std::string dump_circuit_name;        // empty => dumping disabled
+static std::filesystem::path dump_dir;
+static std::mutex dump_mutex;
+
+void
+set_subcircuit_dump(const std::string& circuit_file, const std::string& out_dir) {
+  dump_circuit_name = std::filesystem::path(circuit_file).stem().string();
+  dump_dir = std::filesystem::path(out_dir) / dump_circuit_name;
+}
+
+static std::string
+json_escape(const std::string& s) {
+  std::string r;
+  r.reserve(s.size());
+  for(char c : s) {
+    switch(c) {
+    case '"': r += "\\\""; break;
+    case '\\': r += "\\\\"; break;
+    case '\n': r += "\\n"; break;
+    case '\t': r += "\\t"; break;
+    default:
+      if(static_cast<unsigned char>(c) < 0x20) {
+        char buf[8];
+        snprintf(buf, sizeof buf, "\\u%04x", c);
+        r += buf;
+      } else
+        r += c;
+    }
+  }
+  return r;
+}
+
+static void
+write_gate_array(std::ofstream& out, const char* key,
+                 const std::vector<Gate*>& gs) {
+  out << "  \"" << key << "\": [";
+  for(size_t i = 0; i < gs.size(); ++i) {
+    Gate* g = gs[i];
+    out << (i ? ",\n" : "\n") << "    {\"var\": " << g->get_var()
+        << ", \"name\": \"" << json_escape(g->get_var_name())
+        << "\", \"level\": " << g->get_level()
+        << ", \"cone\": " << g->get_cone_id() << "}";
+  }
+  out << (gs.empty() ? "]" : "\n  ]");
+}
+
+void
+save_subcircuit_to_file(Subcircuit& sc, Gate* root, unsigned size,
+                        const char* mode) {
+  if(dump_circuit_name.empty() || !root)
+    return;
+
+  std::lock_guard<std::mutex> lock(dump_mutex);
+
+  std::error_code ec;
+  std::filesystem::create_directories(dump_dir, ec);
+  if(ec) {
+    warning("cannot create directory %s: %s",
+            dump_dir.string().c_str(), ec.message().c_str());
+    return;
+  }
+
+  auto file = dump_dir / ("root_" + std::to_string(root->get_var()) + ".json");
+  std::ofstream out(file);
+  if(!out) {
+    warning("cannot open %s for writing", file.string().c_str());
+    return;
+  }
+
+  out << "{\n";
+  out << "  \"circuit\": \"" << json_escape(dump_circuit_name) << "\",\n";
+  out << "  \"root\": {\"var\": " << root->get_var() << ", \"name\": \""
+      << json_escape(root->get_var_name()) << "\", \"level\": "
+      << root->get_level() << "},\n";
+  out << "  \"mode\": \"" << mode << "\",\n";
+  out << "  \"depth\": " << size << ",\n";
+  write_gate_array(out, "inputs", sc.inputs);
+  out << ",\n";
+  write_gate_array(out, "nodes", sc.nodes);
+  out << "\n}\n";
+
+  if(verbose > 0)
+    msg("saved subcircuit for root %s to %s",
+        root->get_var_name().c_str(), file.string().c_str());
+}
+
+static Subcircuit
+get_subcircuit_impl(Gate* root, unsigned size, bool new_leading,
+                    const char*& mode) {
+  Subcircuit result;
+
+  if(!root) {
+    warning("no root gate provided for subcircuit extraction");
+    return result;
+  }
+  if(root->get_input()) {
+    warning("root gate %s is an input gate, cannot extract subcircuit",
+            root->get_var_name().c_str());
+    return result;
+  }
+
+  if(root->has_any_faha_maj_id() || root->has_any_faha_xor_id()) {
+    mode = "faha";
+    if(verbose > 0)
+      msg("root gate %s is part of faha-substitute, extract faha subcircuit",
+          root->get_var_name().c_str());
+    return gen_faha_subcircuit(root->get_faha_ids());
+  }
+
+  if(root->is_fsa() && new_leading) {
+    mode = "fsa";
+    if(verbose > 0)
+      msg("root gate %s , cone %d is part of fsa-substitute, extract fsa "
+          "subcircuit",
+          root->get_var_name().c_str(), root->get_cone_id());
+    return gen_fsa_subcircuit(root);
+  }
+
+  mode = "depth";
+  if(verbose > 0)
+    msg("extracting subcircuit of depth %d from root gate %s with level %d, "
+        "dist %d and COI %d",
+        size, root->get_var_name().c_str(), root->get_level(),
+        root->get_dist(), root->get_cone_id());
+
+  return extract_subcircuit_by_depth(root, size);
+}
+
+Subcircuit
+get_subcircuit(Gate* root, unsigned size, bool new_leading) {
+  const char* mode = "none";
+  Subcircuit sc = get_subcircuit_impl(root, size, new_leading, mode);
+  if(!sc.nodes.empty())
+    save_subcircuit_to_file(sc, root, size, mode);
+  return sc;
 }
 /*------------------------------------------------------------------------*/
 
